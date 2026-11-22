@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+docker-compose.override.yml
+
+# ML models (large files)
+ml_models/*.pt
+ml_models/*.pth
+ml_models/*.onnx
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# ChromaDB local storage
+chroma_data/
+
+# Temporary
+tmp/
+temp/
+
