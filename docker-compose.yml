@@ -9,7 +9,6 @@ services:
       - DATABASE_URL=postgresql+asyncpg://aerotwin:aerotwin_secret_2026@timescaledb:5432/aerotwin
       - REDIS_URL=redis://redis:6379/0
     volumes:
-      - ./backend:/app
       - ./maintenance_docs:/app/maintenance_docs
       - chroma_data:/app/chroma_data
     depends_on:

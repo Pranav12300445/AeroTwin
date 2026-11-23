@@ -57,7 +57,7 @@ export function useWebSocket() {
   const [agentEvents, setAgentEvents] = useState<AgentActivity[]>([])
   const [maintenance, setMaintenance] = useState<MaintenanceRecommendation | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectRef = useRef<ReturnType<typeof setTimeout>>()
+  const reconnectRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const connect = useCallback(() => {
     try {

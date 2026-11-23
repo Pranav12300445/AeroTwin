@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from ..models.schemas import TelemetryReading, FaultType
+from ..models.schemas import TelemetryReading
 
 
 class FaultScenario(str, Enum):

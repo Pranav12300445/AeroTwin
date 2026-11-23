@@ -17,9 +17,9 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .config import get_settings
-from .db.database import get_db, User
-from .models.schemas import UserRole
+from ..config import get_settings
+from ..db.database import get_db, User
+from ..models.schemas import UserRole
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")

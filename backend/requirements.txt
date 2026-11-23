@@ -6,21 +6,12 @@ pydantic==2.10.3
 pydantic-settings==2.7.0
 python-dotenv==1.0.1
 
-# Agents
-autogen-agentchat==0.4.7
-autogen-ext[openai]==0.4.7
-
-# ML / Data Science
-torch==2.5.1
+# ML — only numpy needed (z-score anomaly detector, digital twin math)
 numpy==2.2.1
-pandas==2.2.3
-scikit-learn==1.6.0
 
 # Database
 asyncpg==0.30.0
 sqlalchemy[asyncio]==2.0.36
-psycopg2-binary==2.9.10
-alembic==1.14.0
 
 # RAG
 chromadb==0.5.23
@@ -36,11 +27,5 @@ passlib[bcrypt]==1.7.4
 # Logging
 structlog==24.4.0
 
-# HTTP client (for Groq)
+# HTTP client (for Groq LLM)
 httpx==0.28.1
-openai==1.58.1
-
-# Testing
-pytest==8.3.4
-pytest-asyncio==0.24.0
-
