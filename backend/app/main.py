@@ -202,10 +202,20 @@ async def lifespan(app: FastAPI):
     # 5. Wire up agent subscriptions (Maintenance Planner listens for faults)
     await setup_agent_subscriptions()
 
-    # 6. Start event bus listener
+    # 6. Subscribe to maintenance + agent activity for WebSocket forwarding
+    async def forward_maintenance(event: dict):
+        await broadcast_to_clients("maintenance", event.get("data", {}))
+
+    async def forward_agent_activity(event: dict):
+        await broadcast_to_clients("agent_activity", event.get("data", event))
+
+    await bus.subscribe("maintenance.recommended", forward_maintenance)
+    await bus.subscribe("agent.activity", forward_agent_activity)
+
+    # 7. Start event bus listener
     listener_task = asyncio.create_task(bus.listen())
 
-    # 7. Start simulator
+    # 8. Start simulator
     simulator_task = None
     if settings.simulator_enabled:
         simulator.interval_ms = settings.simulator_interval_ms

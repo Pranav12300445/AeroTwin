@@ -126,7 +126,7 @@ async def inject_fault(
 
 @simulator_router.post("/reset")
 async def reset_simulator(
-    user: User = Depends(require_role(UserRole.ADMIN)),
+    user: User = Depends(require_role(UserRole.ADMIN, UserRole.MAINTENANCE_ENGINEER)),
 ):
     """Reset simulator to normal operation."""
     bus = get_event_bus()

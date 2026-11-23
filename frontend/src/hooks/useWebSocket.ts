@@ -34,6 +34,20 @@ export interface AgentActivity {
   summary: string
 }
 
+export interface MaintenanceRecommendation {
+  fault_type: string
+  confidence: number
+  rul_hours: number | null
+  priority: string
+  procedure_summary: string
+  steps: string[]
+  estimated_downtime: string
+  safety_note: string
+  source_documents: string[]
+  llm_enhanced: boolean
+  message: string
+}
+
 const MAX_HISTORY = 120
 
 export function useWebSocket() {
@@ -41,6 +55,7 @@ export function useWebSocket() {
   const [latest, setLatest] = useState<TelemetryData | null>(null)
   const [history, setHistory] = useState<TelemetryData[]>([])
   const [agentEvents, setAgentEvents] = useState<AgentActivity[]>([])
+  const [maintenance, setMaintenance] = useState<MaintenanceRecommendation | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -85,6 +100,29 @@ export function useWebSocket() {
                 return [...prev.slice(-99), evt]
               })
             }
+            // Clear maintenance when back to normal
+            if (!data.is_anomaly && data.fault_type === 'none') {
+              setMaintenance(null)
+            }
+          } else if (msg.type === 'maintenance') {
+            setMaintenance(msg.data as MaintenanceRecommendation)
+            setAgentEvents((prev) => {
+              const evt: AgentActivity = {
+                timestamp: new Date().toISOString(),
+                agent: 'maintenance_planner',
+                event: 'maintenance.recommended',
+                summary: msg.data.message || `${msg.data.priority}: ${msg.data.fault_type}`,
+              }
+              return [...prev.slice(-99), evt]
+            })
+          } else if (msg.type === 'agent_activity') {
+            const a = msg.data
+            setAgentEvents((prev) => [...prev.slice(-99), {
+              timestamp: a.timestamp || new Date().toISOString(),
+              agent: a.agent || 'system',
+              event: a.event || a.channel || 'activity',
+              summary: a.summary || a.message || '',
+            }])
           }
         } catch { /* ignore parse errors */ }
       }
@@ -114,5 +152,5 @@ export function useWebSocket() {
     }
   }, [connect])
 
-  return { connected, latest, history, agentEvents, sendCommand }
+  return { connected, latest, history, agentEvents, maintenance, sendCommand }
 }

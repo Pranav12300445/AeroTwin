@@ -28,3 +28,7 @@ body {
 .glow-green { box-shadow: 0 0 12px rgba(34, 197, 94, 0.3); }
 .glow-yellow { box-shadow: 0 0 12px rgba(234, 179, 8, 0.3); }
 .glow-red { box-shadow: 0 0 12px rgba(239, 68, 68, 0.4); }
+
+/* Toast slide-in animation */
+@keyframes toast-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.toast-enter { animation: toast-in 0.3s ease-out; }
