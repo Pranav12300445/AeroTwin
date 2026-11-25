@@ -1,7 +1,7 @@
 """Pydantic models for telemetry, faults, and maintenance."""
 
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -29,7 +29,7 @@ class UserRole(str, Enum):
 class TelemetryReading(BaseModel):
     """Single telemetry snapshot from all 6 sensor channels."""
 
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     engine_id: str = "engine-001"
 
     # Channel 1: Exhaust Gas Temperature (°C)

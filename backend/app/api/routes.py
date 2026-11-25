@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.database import get_db, User, TelemetryRecord, AssetHistory
 from ..auth.auth import (
-    verify_password, create_access_token,
+    verify_password, create_access_token, decode_access_token,
     get_current_user, require_role,
 )
 from ..models.schemas import UserResponse, TokenResponse, UserRole
@@ -143,9 +143,22 @@ ws_router = APIRouter()
 _ws_connections: set[WebSocket] = set()
 
 
+# Roles allowed to send commands over the socket (same as the REST fault endpoints)
+_WS_COMMAND_ROLES = {UserRole.ADMIN.value, UserRole.MAINTENANCE_ENGINEER.value}
+
+
 @ws_router.websocket("/ws/telemetry")
-async def telemetry_ws(websocket: WebSocket):
-    """WebSocket endpoint for real-time telemetry + agent events."""
+async def telemetry_ws(websocket: WebSocket, token: str = ""):
+    """WebSocket endpoint for real-time telemetry + agent events.
+
+    Requires a valid JWT as ?token=... — an invalid token is rejected (policy violation, 1008).
+    """
+    claims = decode_access_token(token)
+    if claims is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    role = claims.get("role")
+
     await websocket.accept()
     _ws_connections.add(websocket)
     try:
@@ -153,18 +166,18 @@ async def telemetry_ws(websocket: WebSocket):
             data = await websocket.receive_text()
             try:
                 cmd = json.loads(data)
-                if cmd.get("action") == "inject_fault":
+                if cmd.get("action") == "inject_fault" and role in _WS_COMMAND_ROLES:
                     bus = get_event_bus()
                     await bus.publish(
                         "simulator.command",
                         {"action": "inject_fault", "scenario": cmd.get("scenario", "none")},
                         agent_name="dashboard",
                     )
-            except (json.JSONDecodeError, KeyError):
-                pass
+            except (json.JSONDecodeError, AttributeError):
+                pass  # ignore malformed commands
     except WebSocketDisconnect:
-        _ws_connections.discard(websocket)
-    except Exception:
+        pass
+    finally:
         _ws_connections.discard(websocket)
 
 
@@ -174,9 +187,9 @@ async def broadcast_to_clients(event_type: str, data: dict):
         return
     message = json.dumps({"type": event_type, "data": data}, default=str)
     dead = set()
-    for ws in _ws_connections:
+    for ws in list(_ws_connections):  # copy: handlers may add/discard while we await
         try:
             await ws.send_text(message)
         except Exception:
             dead.add(ws)
-    _ws_connections -= dead
+    _ws_connections.difference_update(dead)  # in-place: `-=` would rebind the global and raise UnboundLocalError

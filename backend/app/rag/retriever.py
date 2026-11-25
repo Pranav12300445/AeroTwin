@@ -4,10 +4,7 @@ RAG Pipeline — ChromaDB + Sentence-Transformers for maintenance procedure retr
 
 import os
 import glob
-from typing import Optional
-
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+from typing import Any, Optional
 
 
 class MaintenanceRAG:
@@ -20,14 +17,22 @@ class MaintenanceRAG:
 
     COLLECTION_NAME = "maintenance_procedures"
 
-    def __init__(self, docs_dir: str = "maintenance_docs", persist_dir: str = "chroma_data"):
+    def __init__(self, docs_dir: str = "maintenance_docs", persist_dir: str = "chroma_data",
+                 embedding_function=None):
         self.docs_dir = docs_dir
         self.persist_dir = persist_dir
-        self._client: Optional[chromadb.Client] = None
+        # None -> Chroma's default (all-MiniLM-L6-v2). Tests inject an offline embedder.
+        self._embedding_function = embedding_function
+        self._client: Optional[Any] = None
         self._collection = None
 
     def initialize(self):
         """Initialize ChromaDB and load documents."""
+        # Imported here (not at module level) so the rest of the app imports even where
+        # chromadb can't be installed (it needs a C++ toolchain on some Windows setups).
+        import chromadb
+        from chromadb.config import Settings as ChromaSettings
+
         self._client = chromadb.Client(ChromaSettings(
             anonymized_telemetry=False,
             is_persistent=True,
@@ -35,9 +40,11 @@ class MaintenanceRAG:
         ))
 
         # Use default embedding function (all-MiniLM-L6-v2)
+        kwargs = {"embedding_function": self._embedding_function} if self._embedding_function else {}
         self._collection = self._client.get_or_create_collection(
             name=self.COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
+            **kwargs,
         )
 
         # Load docs if collection is empty
@@ -88,6 +95,8 @@ class MaintenanceRAG:
             end = start + chunk_size
             chunk = " ".join(words[start:end])
             chunks.append(chunk)
+            if end >= len(words):
+                break  # last chunk reached; otherwise the overlap would emit a duplicate tail chunk
             start = end - overlap
         return chunks if chunks else [text]
 

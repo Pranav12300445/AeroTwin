@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest==8.4.2
+pytest-asyncio==1.2.0
+pytest-cov==7.0.0
+aiosqlite==0.21.0   # in-memory/file SQLite stands in for TimescaleDB in tests
+fakeredis==2.31.3   # in-process Redis (pub/sub + streams) for event-bus tests

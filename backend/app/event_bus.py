@@ -38,9 +38,9 @@ class EventBus:
     async def disconnect(self):
         if self._pubsub:
             await self._pubsub.unsubscribe()
-            await self._pubsub.close()
+            await self._pubsub.aclose()
         if self._redis:
-            await self._redis.close()
+            await self._redis.aclose()
 
     async def publish(self, channel: str, data: dict, agent_name: str = "system") -> None:
         """Publish an event to a channel."""

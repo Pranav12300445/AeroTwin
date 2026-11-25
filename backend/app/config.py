@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     # Groq LLM
     groq_api_key: str = ""
+    # Groq retires models regularly (llama-3.1-70b-versatile and llama-3.3-70b-versatile are gone),
+    # so the model id is configurable via GROQ_MODEL.
+    groq_model: str = "openai/gpt-oss-120b"
 
     # Database
     database_url: str = "postgresql+asyncpg://aerotwin:aerotwin_secret_2026@localhost:5432/aerotwin"

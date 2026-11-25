@@ -22,7 +22,11 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
+import structlog
+
 from ..models.schemas import TelemetryReading
+
+logger = structlog.get_logger()
 
 
 class FaultScenario(str, Enum):
@@ -186,7 +190,10 @@ class EngineSimulator:
         self._running = True
         while self._running:
             reading = self.generate_reading()
-            await callback(reading)
+            try:
+                await callback(reading)
+            except Exception as e:  # keep streaming even if one tick's pipeline fails
+                logger.error("simulator_callback_failed", error=str(e))
             await asyncio.sleep(self.interval_ms / 1000.0)
 
     def stop(self) -> None:

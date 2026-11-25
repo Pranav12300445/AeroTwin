@@ -22,12 +22,18 @@ class DigitalTwin:
     based on observed residuals, simulating long-term wear.
     """
 
+    MIN_DRIFT_RESIDUAL = 30.0  # degrees C (same scale as the health-degradation threshold; fuel-flow noise alone gives ~15)
+
     def __init__(self, engine_id: str = "engine-001"):
         self.engine_id = engine_id
 
         # Learned coefficients (would be calibrated per engine in production)
-        self._base_egt = 300.0           # Base EGT at idle
-        self._fuel_coeff = 650.0         # EGT increase per L/min of fuel
+        # Fitted so a healthy engine at nominal cruise (fuel 0.45 L/min, ~75k RPM, 500 m, 25 C)
+        # predicts ~630 C and tracks the +-15 % throttle swing. The previous guess (300 / 650)
+        # predicted ~685 C, i.e. a permanent -55 C residual and a health factor that decayed
+        # in normal operation.
+        self._base_egt = -17.5          # Empirical offset (cancels the OAT/altitude terms at nominal)
+        self._fuel_coeff = 1233.0        # EGT increase per L/min of fuel
         self._rpm_coeff = 0.001          # EGT contribution from RPM
         self._altitude_coeff = -0.005    # EGT drops slightly with altitude (cooler air)
         self._oat_coeff = 0.8            # Ambient temp influence
@@ -86,7 +92,9 @@ class DigitalTwin:
         if len(self._residual_history) >= 20:
             recent = sum(self._residual_history[-10:]) / 10
             older = sum(self._residual_history[-20:-10]) / 10
-            drift_detected = recent > older * 1.3  # 30% increase
+            # 30 % increase AND a real offset: with a good fit the residual is pure sensor noise
+            # (a few degrees), where a bare ratio test fires at random.
+            drift_detected = recent > older * 1.3 and recent > self.MIN_DRIFT_RESIDUAL
 
         return {
             "expected_egt": expected,

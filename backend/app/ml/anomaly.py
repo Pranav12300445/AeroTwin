@@ -1,33 +1,36 @@
 """
-Anomaly Detection via running z-score + RUL prediction.
+Anomaly Detection via z-score against a calibrated baseline + RUL prediction.
 
 Detects deviations from normal engine operating patterns.
 High z-score across any sensor channel = anomaly.
 """
 
-import numpy as np
 from typing import Optional
 
 
 class AnomalyDetector:
     """
-    Lightweight anomaly detector using statistical z-score approach.
+    Lightweight anomaly detector: z-score of each channel against a fixed, calibrated baseline.
 
-    For the hackathon, we use a running statistics model that
-    learns normal behavior and flags deviations. This can be
-    upgraded to a trained LSTM Autoencoder with real data.
+    Why fixed and not a rolling window: a baseline that keeps learning from incoming data also
+    learns the fault. Measured on the simulator, a rolling-window detector "forgot" bearing wear
+    after ~30 s (vibration still ~8 g) and absorbed fuel-nozzle clogging entirely, because slow
+    drift moves both the window mean and std. A fixed baseline cannot be talked into accepting it.
+
+    ponytail: upgrade path is a trained model (LSTM autoencoder) on real run-to-failure data.
     """
 
     # Feature order: egt, rpm_n1, rpm_n2, vibration, fuel_flow, oil_pressure, oil_temp
     FEATURE_NAMES = ["egt", "rpm_n1", "rpm_n2", "vibration", "fuel_flow", "oil_pressure", "oil_temp"]
 
-    # Normal operating ranges (mean, std) — calibrated for JetCat-style engine
+    # Normal operating (mean, std). EGT / RPM / fuel flow std cover the +-15 % throttle swing of
+    # normal cruise (std ~ 8 % of nominal), otherwise ordinary throttle changes raise false alarms.
     NORMAL_STATS = {
-        "egt":          (630.0, 25.0),
-        "rpm_n1":       (73000.0, 2000.0),
-        "rpm_n2":       (77000.0, 2000.0),
+        "egt":          (630.0, 50.0),
+        "rpm_n1":       (73000.0, 5500.0),
+        "rpm_n2":       (77000.0, 5500.0),
         "vibration":    (0.7, 0.3),
-        "fuel_flow":    (0.45, 0.05),
+        "fuel_flow":    (0.45, 0.04),
         "oil_pressure": (55.0, 5.0),
         "oil_temp":     (82.0, 6.0),
     }
@@ -35,29 +38,8 @@ class AnomalyDetector:
     # Anomaly threshold — z-score above this is anomalous
     ANOMALY_THRESHOLD = 3.0
 
-    def __init__(self):
-        self._window: list[dict[str, float]] = []
-        self._window_size = 50
-        self._running_means: Optional[dict[str, float]] = None
-        self._running_stds: Optional[dict[str, float]] = None
-
     def _extract_features(self, reading_dict: dict) -> dict[str, float]:
         return {f: reading_dict.get(f, 0.0) for f in self.FEATURE_NAMES}
-
-    def _update_running_stats(self):
-        """Update running mean/std from the window."""
-        if len(self._window) < 10:
-            # Use pre-calibrated stats until we have enough data
-            self._running_means = {f: s[0] for f, s in self.NORMAL_STATS.items()}
-            self._running_stds = {f: s[1] for f, s in self.NORMAL_STATS.items()}
-            return
-
-        self._running_means = {}
-        self._running_stds = {}
-        for f in self.FEATURE_NAMES:
-            vals = [w[f] for w in self._window]
-            self._running_means[f] = np.mean(vals)
-            self._running_stds[f] = max(np.std(vals), 1e-6)  # prevent div by zero
 
     def score(self, reading_dict: dict) -> dict:
         """
@@ -67,35 +49,55 @@ class AnomalyDetector:
             anomaly_score: float (0-1, higher = more anomalous)
             is_anomaly: bool
             feature_scores: dict of per-feature z-scores
+            top_anomaly_feature: name of the channel with the highest z-score
         """
         features = self._extract_features(reading_dict)
 
-        # Add to window
-        self._window.append(features)
-        if len(self._window) > self._window_size:
-            self._window.pop(0)
-
-        self._update_running_stats()
-
-        # Compute z-scores per feature
-        z_scores = {}
-        for f in self.FEATURE_NAMES:
-            mean = self._running_means[f]
-            std = self._running_stds[f]
-            z_scores[f] = abs(features[f] - mean) / std
+        z_scores = {
+            f: abs(features[f] - mean) / std
+            for f, (mean, std) in self.NORMAL_STATS.items()
+        }
 
         # Composite anomaly score = max z-score normalized to [0, 1]
         max_z = max(z_scores.values())
         anomaly_score = min(1.0, max_z / (self.ANOMALY_THRESHOLD * 2))
 
-        is_anomaly = max_z > self.ANOMALY_THRESHOLD
-
         return {
             "anomaly_score": round(anomaly_score, 4),
-            "is_anomaly": is_anomaly,
-            "feature_scores": {f: round(z, 3) for f, z in z_scores.items()},
+            "is_anomaly": bool(max_z > self.ANOMALY_THRESHOLD),
+            "feature_scores": {f: round(float(z), 3) for f, z in z_scores.items()},
             "top_anomaly_feature": max(z_scores, key=z_scores.get),
         }
+
+
+def classify_fault(feature_scores: dict[str, float], threshold: float = AnomalyDetector.ANOMALY_THRESHOLD) -> str:
+    """
+    Map a per-feature z-score signature to a fault type ("none" if nothing is anomalous).
+
+    Classifying on the single top feature does not work: compressor stall and bearing wear are
+    both vibration-dominated, so stall was labelled bearing_wear ~90 % of the time. Signatures:
+        compressor_stall  vibration up TOGETHER WITH spool speed / fuel flow / EGT upset
+        fuel_nozzle_clog  fuel flow off, vibration normal
+        bearing_wear      vibration / oil pressure / oil temp, spool speed and fuel normal
+    ponytail: hand-written rules; upgrade path is a classifier trained on labelled run-to-failure data.
+    """
+    z = feature_scores
+    corroborated = 2.5  # secondary channels only need to be clearly off, not past the alarm line
+    rpm = max(z.get("rpm_n1", 0.0), z.get("rpm_n2", 0.0))
+    vibrating = z.get("vibration", 0.0) > threshold
+
+    if vibrating and (rpm > corroborated or z.get("fuel_flow", 0.0) > corroborated
+                      or z.get("egt", 0.0) > corroborated):
+        return "compressor_stall"
+    if z.get("fuel_flow", 0.0) > threshold and not vibrating:
+        return "fuel_nozzle_clog"
+    if max(z.get("vibration", 0.0), z.get("oil_pressure", 0.0), z.get("oil_temp", 0.0)) > threshold:
+        return "bearing_wear"
+    if rpm > threshold:
+        return "compressor_stall"
+    if z.get("egt", 0.0) > threshold:
+        return "turbine_erosion"
+    return "none"
 
 
 class RULPredictor:

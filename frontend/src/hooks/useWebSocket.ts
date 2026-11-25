@@ -148,7 +148,10 @@ export function useWebSocket() {
     connect()
     return () => {
       clearTimeout(reconnectRef.current)
-      wsRef.current?.close()
+      if (wsRef.current) {
+        wsRef.current.onclose = null  // otherwise close() schedules a reconnect after unmount
+        wsRef.current.close()
+      }
     }
   }, [connect])
 

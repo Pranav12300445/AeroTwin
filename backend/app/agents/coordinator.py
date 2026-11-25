@@ -9,11 +9,16 @@ Agent roster:
 """
 
 import json
+import time
 from typing import Optional
+
+import structlog
 
 from ..event_bus import get_event_bus
 from ..rag.retriever import MaintenanceRAG
 from .llm_client import ask_llm
+
+logger = structlog.get_logger()
 
 
 # ── RAG singleton ──
@@ -26,6 +31,14 @@ def get_rag() -> MaintenanceRAG:
         _rag = MaintenanceRAG()
         _rag.initialize()
     return _rag
+
+
+# fault.predicted fires on every anomalous tick (1 Hz). Without a cooldown each one would hit
+# ChromaDB and the LLM (Groq free tier is 30 req/min). A new recommendation is produced when a
+# (fault, severity) pair is first seen, then at most once per cooldown.
+# ponytail: in-memory dict; move to Redis (SET NX EX) if you ever run more than one API worker.
+COOLDOWN_SECONDS = 30.0
+_last_handled: dict[tuple[str, str], float] = {}
 
 
 MAINTENANCE_SYSTEM_PROMPT = """You are the Maintenance Planner agent for AeroTwin, a UAV turbine engine health monitoring system.
@@ -60,9 +73,18 @@ async def handle_fault_predicted(event: dict):
     if fault_type == "none":
         return
 
+    key = (fault_type, severity)
+    now = time.monotonic()
+    if now - _last_handled.get(key, float("-inf")) < COOLDOWN_SECONDS:
+        return
+    _last_handled[key] = now
+
     # 1. RAG retrieval
-    rag = get_rag()
-    procedures = rag.get_procedure_for_fault(fault_type)
+    try:
+        procedures = get_rag().get_procedure_for_fault(fault_type)
+    except Exception as e:  # RAG is an enhancement: still issue a recommendation without it
+        logger.warning("rag_unavailable", error=str(e))
+        procedures = []
 
     # Build context from retrieved docs
     rag_context = ""
@@ -94,6 +116,8 @@ async def handle_fault_predicted(event: dict):
                 clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
             llm_recommendation = json.loads(clean)
         except (json.JSONDecodeError, IndexError):
+            llm_recommendation = None
+        if not isinstance(llm_recommendation, dict):  # e.g. the model returned a JSON list
             llm_recommendation = None
 
     # 4. Build recommendation (LLM-enhanced or fallback)

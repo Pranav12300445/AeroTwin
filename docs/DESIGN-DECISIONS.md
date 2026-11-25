@@ -62,7 +62,7 @@ flowchart LR
 
 | Decision | Choice | Cost |
 |---|---|---|
-| **LLM** | Groq free tier — Llama 3.1 70B | Free (rate-limited) |
+| **LLM** | Groq free tier — model via `GROQ_MODEL` | Free (rate-limited) |
 | **Embeddings** | Sentence-Transformers `all-MiniLM-L6-v2` (local) | Free (runs on CPU) |
 
 ---

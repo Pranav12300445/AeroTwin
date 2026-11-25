@@ -16,7 +16,7 @@ from .db.database import init_db, get_session_factory
 from .event_bus import get_event_bus
 from .simulator.engine import EngineSimulator, FaultScenario
 from .twin.digital_twin import DigitalTwin
-from .ml.anomaly import AnomalyDetector, RULPredictor
+from .ml.anomaly import AnomalyDetector, RULPredictor, classify_fault
 from .api.routes import auth_router, telemetry_router, simulator_router, ws_router, broadcast_to_clients
 from .auth.auth import seed_default_users
 from .agents.coordinator import setup_agent_subscriptions
@@ -46,22 +46,10 @@ async def process_telemetry(reading):
     # 2. Anomaly Detection
     anomaly_result = anomaly_detector.score(reading_dict)
 
-    # 3. RUL Prediction (if anomaly detected)
-    fault_type = "none"
-    if anomaly_result["is_anomaly"]:
-        # Map top anomaly feature to likely fault type
-        feature = anomaly_result["top_anomaly_feature"]
-        fault_map = {
-            "vibration": "bearing_wear",
-            "oil_pressure": "bearing_wear",
-            "oil_temp": "bearing_wear",
-            "rpm_n1": "compressor_stall",
-            "rpm_n2": "compressor_stall",
-            "fuel_flow": "fuel_nozzle_clog",
-            "egt": "turbine_erosion",
-        }
-        fault_type = fault_map.get(feature, "none")
+    # 3. Fault classification from the full z-score signature (only when anomalous)
+    fault_type = classify_fault(anomaly_result["feature_scores"]) if anomaly_result["is_anomaly"] else "none"
 
+    # 4a. RUL prediction
     rul = rul_predictor.predict(anomaly_result["anomaly_score"], fault_type)
 
     # 4. Determine engine status
@@ -229,9 +217,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     simulator.stop()
     bus.stop()
-    if simulator_task:
-        simulator_task.cancel()
-    listener_task.cancel()
+    tasks = [t for t in (simulator_task, listener_task) if t]
+    for t in tasks:
+        t.cancel()
+    # Wait for the tasks to actually finish before closing Redis under them.
+    await asyncio.gather(*tasks, return_exceptions=True)
     await bus.disconnect()
     logger.info("aerotwin_shutdown")
 

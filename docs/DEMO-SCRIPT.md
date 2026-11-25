@@ -47,7 +47,7 @@
 ## Key Talking Points
 - **Multi-agent coordination**: 4 agents communicate via Redis event bus
 - **Physics-informed**: Brayton-cycle digital twin, not just ML
-- **RAG + LLM**: Real maintenance procedures + Groq Llama reasoning
+- **RAG + LLM**: Real maintenance procedures + Groq LLM reasoning
 - **Role-based access**: JWT RBAC with 3 roles
 - **Observable**: Every agent action is logged and visible
 - **Containerized**: One `docker compose up` to run everything

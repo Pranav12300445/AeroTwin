@@ -40,6 +40,15 @@ def create_access_token(username: str, role: str) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def decode_access_token(token: str) -> Optional[dict]:
+    """Return the JWT claims, or None if the token is missing/invalid/expired."""
+    settings = get_settings()
+    try:
+        return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        return None
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),

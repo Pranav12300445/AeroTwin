@@ -65,7 +65,7 @@ Then open:
 1. **Telemetry Monitor** — ingests 6 sensor channels, detects anomalies (z-score)
 2. **Digital Twin Sync** — Brayton-cycle physics model, computes residuals, tracks health factor
 3. **Fault Predictor** — classifies faults from anomaly features, predicts Remaining Useful Life
-4. **Maintenance Planner** — retrieves procedures via RAG (ChromaDB) + generates recommendations via LLM (Groq Llama 3.1 70B)
+4. **Maintenance Planner** — retrieves procedures via RAG (ChromaDB) + generates recommendations via LLM (Groq, model set by `GROQ_MODEL`)
 
 ## Sensor Channels
 
@@ -109,8 +109,8 @@ Use the dashboard buttons (login as `engineer` or `admin`) or API:
 | Database | TimescaleDB (PostgreSQL 16 hypertable) |
 | Messaging | Redis 7 Pub/Sub + Streams |
 | RAG | ChromaDB + all-MiniLM-L6-v2 |
-| LLM | Groq free tier (Llama 3.1 70B, 30 req/min) |
-| Anomaly Detection | Running z-score (7 features) |
+| LLM | Groq free tier (`GROQ_MODEL`, default `openai/gpt-oss-120b`; 30 req/min) |
+| Anomaly Detection | z-score vs. a fixed calibrated baseline (7 features) + rule-based fault classifier |
 | RUL Prediction | Degradation model with fault-specific base hours |
 | Auth | JWT + bcrypt + RBAC (3 roles) |
 | Deploy | Docker Compose (4 services) |
@@ -181,3 +181,25 @@ npm run dev
 ## License
 
 Built for Smart India Hackathon 2026.
+
+## Testing
+
+No Docker needed: the suites swap TimescaleDB for SQLite and Redis for an in-process fake.
+
+```bash
+# Backend: unit + integration (329 tests)
+cd backend
+pip install -r requirements-dev.txt
+pytest                         # everything
+pytest -m integration          # API + DB + event bus + agents + real WebSocket handshakes
+pytest --cov=app               # coverage (.coveragerc included)
+
+# Frontend (102 tests)
+cd frontend
+npm install
+npm test
+```
+
+Notes: the RAG tests use real ChromaDB with an offline embedder and are skipped automatically
+if `chromadb` isn't installed. WebSocket connections now require a JWT (`/ws/telemetry?token=...`);
+only engineers/admins can send fault commands over it.

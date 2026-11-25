@@ -29,6 +29,10 @@ export async function fetchWithAuth(path: string, options: RequestInit = {}) {
     window.location.href = '/'
     throw new Error('Unauthorized')
   }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail ?? `Request failed (${res.status})`)
+  }
   return res.json()
 }
 
@@ -41,5 +45,7 @@ export async function resetSimulator() {
 }
 
 export function createTelemetrySocket(): WebSocket {
-  return new WebSocket(`${WS_URL}/ws/telemetry`)
+  // The server requires a valid JWT on the socket (same RBAC as the REST API)
+  const token = localStorage.getItem('token') ?? ''
+  return new WebSocket(`${WS_URL}/ws/telemetry?token=${encodeURIComponent(token)}`)
 }
