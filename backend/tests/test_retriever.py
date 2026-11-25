@@ -12,7 +12,10 @@ chromadb = pytest.importorskip("chromadb")
 
 from app.rag.retriever import MaintenanceRAG
 
-REPO_DOCS = os.path.join(os.path.dirname(__file__), "..", "..", "maintenance_docs")
+# Works both locally (backend/tests/ → ../../maintenance_docs) and in Docker (/app/tests/ → /app/maintenance_docs)
+_LOCAL = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "maintenance_docs"))
+_DOCKER = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "maintenance_docs"))
+REPO_DOCS = _LOCAL if os.path.isdir(_LOCAL) else _DOCKER
 
 
 class HashEmbedding(chromadb.EmbeddingFunction):

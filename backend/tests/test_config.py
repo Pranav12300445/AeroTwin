@@ -3,8 +3,11 @@
 from app.config import Settings, get_settings
 
 
-def test_settings_defaults():
-    settings = Settings()
+def test_settings_defaults(monkeypatch):
+    # Clear env vars that Docker Compose sets so we test true defaults
+    for key in ("DATABASE_URL", "REDIS_URL", "GROQ_API_KEY", "GROQ_MODEL"):
+        monkeypatch.delenv(key, raising=False)
+    settings = Settings(_env_file=None)
     assert settings.app_name == "AeroTwin"
     assert settings.app_env == "development"
     assert settings.database_url.startswith("postgresql+asyncpg")
